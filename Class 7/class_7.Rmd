@@ -1,0 +1,168 @@
+---
+title: "class07"
+author: "Emma Bernal"
+date: "1/28/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+These are functions here, look here
+```{r}
+#Functions
+is_both_na <- function(x,y){
+  if(length(x) != length(z)){
+    stop("your inputs aren't the same length")
+  }
+  is.na(x) & is.na(y)
+}
+
+
+rescale_new <- function(x, y) {
+  ## Print some info on where NA's are as well as the number of them 
+  if(length(x) != length(y)) {
+    stop("Input x and y should be vectors of the same length", call.=FALSE)
+  }
+  na.in.both <- ( is.na(x) & is.na(y) )
+  na.number <- sum(na.in.both)
+  return(na.number)
+}
+
+
+rescale <- function(x, na.rm=TRUE, plot=FALSE, ...) {
+  # Our rescale function from the end of lecture 6
+
+  if( !is.numeric(x) ) {
+  stop("Input x should be numeric", call.=FALSE)
+  }
+  
+  if(na.rm) {
+    rng <-range(x, na.rm=TRUE)
+  } else {
+    rng <-range(x)
+  }
+
+  answer <- (x - rng[1]) / (rng[2] - rng[1])
+  if(plot) { 
+    plot(answer, ...) 
+  }
+
+  return(answer)
+}
+```
+
+```{r}
+x <- c( 1, 2, NA, 3, NA)
+y <- c(NA, 3, NA, 3, 4)
+z <- c(1, 1)
+is_both_na(x,z)
+```
+
+
+```{r}
+rescale_new <- function(x, y) {
+  ## Print some info on where NA's are as well as the number of them 
+  if(length(x) != length(y)) {
+    stop("Input x and y should be vectors of the same length", call.=FALSE)
+  }
+  na.in.both <- ( is.na(x) & is.na(y) )
+  na.number <- sum(na.in.both)
+  na.which <- which(na.in.both)
+  
+  message("Found ", na.number, " NA's at position(s):",
+ paste(na.which, collapse=", ") )
+
+ return( list(number=na.number, which=na.which) )
+  
+  
+  return(na.number)
+}
+
+rescale_new(x,y)
+```
+
+```{r}
+x <- df1$IDs
+y <- df2$IDs
+
+intersect(x, y)
+
+x
+x %in% y
+
+#ignores the false and outputs only the TRUEs
+x[x %in% y]
+
+#the reciprocal
+y
+y %in% x
+y[y%in%x]
+
+
+cbind(x[x %in% y], y[y%in%x])
+```
+
+
+```{r}
+gene_intersect <- function(x, y) {
+  cbind(x[x %in% y], y[y%in%x])
+}
+
+#we can substitute because we define them earlier
+gene_intersect2 <- function(df1, df2) {
+  cbind(df1[df1$IDs %in% df2$IDs, ], 
+        df2[df2$IDs %in% df1$IDs, ], "exp")
+}
+
+gene_intersect3 <- function(df1, df2, gene.colname = "IDs"){
+  
+   cbind(df1[df1[,gene.colname] %in% df2[,gene.colname], ], 
+        df2[df2[,gene.colname],gene.colname %in% df1[,gene.colname], ], "exp")
+}
+
+gene_intersect4 <- function(df1, df2, gene.colname = "IDs")
+  
+
+
+gene_intersect4(df1, df2, colnames = "new_name")
+
+df1$IDs
+#df1[, "IDs"]
+gene.colname="IDs"
+df1[,gene.colname]
+
+colnames(df1) <- c("new_name", "exp")
+df1
+colnames(df2) <- c("new_name", "exp")
+
+
+x <- df1$IDs
+y <- df2$IDs
+gene_intersect(x,y)
+
+gene_intersect2(df1, df2)
+
+gene_intersect3(df1, df2, gene.colname= "new_name")
+```
+
+```{r}
+ggplot(iris, aes(Sepal.Length, Sepal.Width, color = Species)) + 
+geom_point(aes(shape = Species), size = 3) +
+geom_smooth(method = "lm")
+
+```
+
+
+```{r}
+
+ggplot(iris, aes(Sepal.Length,  fill=Species)) +
+  geom_bar(stat='count')
+```
+
+```{r}
+
+ggplot(iris, aes(Sepal.Length,  fill=Species)) +
+  geom_bar(stat='count', alpha=0.7)
+```
