@@ -1,0 +1,37 @@
+---
+title: "Q6_HW_01_23"
+author: "Emma Bernal"
+date: "1/23/2020"
+output: html_document
+---
+
+
+```{r}
+
+protein <- function(x) {
+  
+  library(bio3d)
+  
+#read the Protein Data Bank (PDB) file (x)
+  p1 <- read.pdb(x) 
+  
+#condenses or "trims" the PDB object
+  p1.chainA <- trim.pdb(p1, chain="A", elety="CA") 
+
+#specifying the b portion of the trimmed PDB file
+  p1.b <- p1.chainA$atom$b
+
+#plots a line graph of x1.b 
+  plotb3(p1.b, sse=p1.chainA, typ="l", ylab="Bfactor")  
+  
+}
+
+
+```
+
+```{r}
+protein("4AKE")
+```
+
+
+
