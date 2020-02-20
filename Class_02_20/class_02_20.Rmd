@@ -1,0 +1,262 @@
+---
+title: "Genomic Transciptomics: Class 02/20/20"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Import today's data
+
+The data for this hands-on session comes from a published RNA-seq experiment where airway smooth muscle cells were treated with dexamethasone, a synthetic glucocorticoid steroid with anti-inflammatory effects (Himes et al. 2014).
+
+Glucocorticoids are used, for example, by people with asthma to reduce inflammation of the airways. The anti-inflammatory effects on airway smooth muscle (ASM) cells has been known for some time but the underlying molecular mechanisms are unclear.
+
+```{r}
+```
+
+
+```{r}
+counts <- read.csv("airway_scaledcounts.csv", stringsAsFactors = FALSE)
+metadata <-  read.csv("airway_metadata.csv", stringsAsFactors = FALSE)
+```
+```
+
+
+```{r}
+
+
+
+# How many genes are we dealing with? - `nrow()`
+
+```{r}
+nrow(counts)
+```
+
+We want to calculate the average counts per gene for control samples and the average for the drug treated samples. We will then compare these values to see if there is a difference overall between control and treated samples for a given gene.
+
+We need to write the code to get that info.
+
+Call out to the data frame  that tells us whats control and what's treated ("metadata"). Use the `$` to get the column that tells us ("dex"), and then `==` either *control* or *treated*.
+
+Now use the "id" column to get the names of the genes.
+
+`metadata$id[metadata$dex == "control"]` tells us the name of the the objects that are either "control" or "treated". 
+
+`metadata[metadata$dex == "control",` ]$id does the same thing
+
+```{r}
+metadata
+```
+
+This is to access the control only rows within metadata.
+```{r}
+control <- metadata[metadata$dex == "control", ]
+control
+```
+
+Use `$id` to access the control columns.
+```{r}
+counts[ , control$id]
+```
+
+`rowSums()` takes the average of the row, then we divide by 4 because there are 4 columns, to the get the average.
+
+```{r}
+rowSums(counts[ , control$id]) / 4
+```
+
+Why is the number '4' troublesome? Because if you end up running more experiements, it wouldn't adapt to my new number of replicates. So instead, let's divide by `nrow()` so that it will always be updated.
+
+```{r}
+rowSums(counts[ , control$id]) / nrow(control)
+```
+
+Now use the $id of the control data to access the control columns in counts and calculate the average
+```{r}
+control.mean <- rowSums(counts[ , control$id]) / nrow(control)
+names(control.mean) <- counts$ensgene
+```
+
+
+Now do the same thing for the *treated* samples.
+```{r}
+treated <- metadata[metadata$dex == "treated", ]
+treated
+```
+
+```{r}
+counts[ , treated$id]
+```
+ d
+```{r}
+treated.mean <- rowSums(counts[ , treated$id]) / nrow(treated)
+names(treated.mean) <- counts$ensgene
+```
+
+Put the average values for *control* and *treated* for each gene in its own data frame.
+```{r}
+meancounts <- data.frame(control.mean, treated.mean)
+head(meancounts)
+```
+
+Now let's plot it to see the relationship between *control* and *treated*.
+```{r}
+plot(meancounts, ylab = "Treated", xlab = "Control")
+```
+
+The range is huge! Let's plot the log. Use argument `log = ""`.
+
+```{r}
+plot(meancounts, log = "xy", ylab = "Treated", xlab = "Control")
+```
+
+If a point lies beneath the diagonal, the genes are *upregulated*. If below, the genes are *downregulated*. 
+
+We can find candidate differentially expressed genes by looking for genes with a large change between control and dex-treated samples. We usually look at the log2 of the fold change, because this has better mathematical properties.
+
+Here we calculate log2foldchange (log2fc), add it to our meancounts data.frame and inspect the results either with the `head()` or the `View()` function for example.
+
+```{r}
+meancounts$log2fc <- log2(meancounts[,"treated.mean"]/meancounts[,"control.mean"])
+head(meancounts)
+```
+
+NaN - trying to take the log of 0, not good. Let's remove any gene that has zero average counts.
+
+
+Example: `which()` tells us the value number where there is a 0.
+```{r}
+x <- c(1, 1, 10, 0)
+x == 0
+which(x == 0)
+```
+
+`arr.ind` tells the row and column.
+```{r}
+x <- data.frame(c(1, 1, 10, 0), c(0, 1, 10, 0))
+x
+which(x == 0, arr.ind = TRUE)
+```
+
+Now, if you just want the row:
+```{r}
+which(x == 0, arr.ind = TRUE)[,"row"]
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+zero.vals <- which(meancounts[,1:2]==0, arr.ind=TRUE)
+
+to.rm <- unique(zero.vals[,1])
+mycounts <- meancounts[-to.rm,]
+head(mycounts)
+```
+
+
+How many genes do I have left?
+```{r}
+nrow(mycounts)
+```
+
+
+A common threshold used for calling something differentially expressed is a log2(FoldChange) of greater than 2 or less than -2. Let’s filter the dataset both ways to see how many genes are up or down-regulated.
+
+```{r}
+up.ind <- mycounts$log2fc > 2
+down.ind <- mycounts$log2fc < (-2)
+```
+
+```{r}
+up.ind
+```
+
+Find out how many are up regulated and down regulated.
+```{r}
+sum(up.ind)
+sum(down.ind)
+```
+
+## Do this properly with DESeq2
+
+```{r}
+library(DESeq2)
+```
+
+
+Set up input for DESeq by specifying countdata, metadata, and the experiment design (i.e. which comparisons we are interested in)
+```{r}
+dds <- DESeqDataSetFromMatrix(countData=counts, 
+                              colData=metadata, 
+                              design=~dex, 
+                              tidy=TRUE)
+dds
+```
+
+```{r}
+dds <- DESeq(dds)
+```
+
+```{r}
+res <- results(dds)
+```
+
+```{r}
+plot(res$log2FoldChange, res$padj)
+```
+This graph isn't helpful so let's take the log.
+
+
+```{r}
+plot(res$log2FoldChange, log(res$padj))
+```
+
+Let's plot this the way the rest of the world does!
+```{r}
+plot(res$log2FoldChange, -log(res$padj), xlab="Log2(FoldChange)", ylab = "-Log(P-Value)")
+```
+
+First, let’s add a column called sig to our full res results that evaluates to TRUE only if padj<0.05 and the absolute log2FoldChange > 2, FALSE if not, and NA if padj is also NA.
+```{r}
+res$sig <- res$padj<0.05 & abs(res$log2FoldChange)>2
+res$sig
+
+sum(is.na(res$sig))
+```
+
+```{r}
+palette( c("gray","blue") )
+
+plot( res$log2FoldChange,  -log(res$padj), 
+ col=res$sig+1, ylab="-Log(P-value)", xlab="Log2(FoldChange)")
+
+# Add some cut-off lines
+abline(v=c(-2,2), col="darkgray", lty=2)
+abline(h=-log(0.1), col="darkgray", lty=2)
+```
+
+
+
+```{r}
+plot( res$log2FoldChange,  -log(res$padj), 
+ col= mycols, ylab="-Log(P-value)", xlab="Log2(FoldChange)" )
+
+# make a vector that's specific 
+mycols <- rep("gray", nrow(res))
+mycols[ abs(res$log2FoldChange) > 2 ]  <- "purple" # this will over right the gray with red
+
+inds <- (res$padj < 0.01) & (abs(res$log2FoldChange) > 2 )
+mycols[ inds ] <- "dark green" #will over right the gray with blue
+
+
+abline(v=c(2, -2), col="black", lty=2)
+abline(h=-log(0.05), col="black", lty=2) # line for the p-value, have to take the -log
+
+```
+
