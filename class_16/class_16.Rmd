@@ -1,0 +1,221 @@
+---
+title: "Class 16: Pathway Analysis from RNA-Seq Results"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Import RNA-Seq counts and metadata
+
+The data for for hands-on session comes from GEO entry: GSE37704, which is associated with the following publication:
+
+Trapnell C, Hendrickson DG, Sauvageau M, Goff L et al. "Differential analysis of gene regulation at transcript resolution with RNA-seq". Nat Biotechnol 2013 Jan;31(1):46-53. PMID: 23222703
+
+The authors report on differential analysis of lung fibroblasts in response to loss of the developmental transcription factor HOXA1. Their results and others indicate that HOXA1 is required for lung fibroblast and HeLa cell cycle progression. In particular their analysis show that "loss of HOXA1 results in significant expression level changes in thousands of individual transcripts, along with isoform switching events in key regulators of the cell cycle". 
+
+
+Here we read the two input files.
+
+
+Our meta data
+
+```{r}
+colData = read.csv("GSE37704_metadata.csv", row.names=1)
+head(colData)
+```
+
+And our count data
+
+```{r}
+countData = read.csv("GSE37704_featurecounts.csv", row.names=1)
+head(countData)
+```
+
+> but we want to get rid of the "length" columns. We want it to match the metadata data.
+
+There are `r nrow(countData)` genes in this dataset and `r ncol(countData)` experiements (samples)..
+
+> by putting the code between `` , when we "knit" it, it will appear as what the code actually calculates.
+
+Looks like there is an extra 'length' column in our countData that we need to remove.
+
+```{r}
+# Note we need to remove the odd first $length col
+# the (-) gives us everything BUT that column.
+
+countData <- as.matrix(countData[,-1])
+head(countData)
+```
+
+Now our columns are just the six experiments!
+
+A little bit more tidying work is required, because there are some genes that have no data. Let's remove them! (they have zero counts in all experiments)
+
+Take the sums across the rows (`rowsum()`), and if it equals 0, exclude those. 
+
+```{r}
+countData <- countData[rowSums(countData) != 0, ]
+```
+
+Check how many genes we have remaining
+
+```{r}
+nrow(countData)
+```
+
+## Running DESeq2
+
+Now we get to run DESeq on our data
+
+```{r}
+library(DESeq2)
+
+dds <- DESeqDataSetFromMatrix(countData=countData,
+                              colData=colData,
+                              design=~condition)
+dds <- DESeq(dds)
+```
+
+> It will produce an error if we have not called `library` for DESeq.
+
+Let's see our results
+
+```{r}
+res <- results(dds)
+res
+```
+
+log2fold tells us about any changes.
+
+## Volcano Plot
+
+A summary volcano plot of our results to date. 
+
+-log2fold change against the p-value.
+
+```{r}
+plot(res$log2FoldChange, -log(res$padj))
+abline(h=-log(0.05), col="red")
+abline(v=c(-2,2), col="red")
+```
+
+Lets add some color...
+
+```{r}
+# Make a color vector for all genes
+mycols <- rep("gray", nrow(res) )
+
+# Color red the genes with absolute fold change above 2
+mycols[ abs(res$log2FoldChange) > 2 ] <- "red"
+
+# Color blue those with adjusted p-value less than 0.01
+#  and absolute fold change more than 2
+inds <- (res$padj < 0.01) & (abs(res$log2FoldChange) > 2 )
+mycols[ inds ] <- "blue"
+
+plot( res$log2FoldChange, -log(res$padj), col=mycols, xlab="Log2(FoldChange)", ylab="-Log(P-value)" )
+```
+
+
+# Adding gene annotation
+
+Since we mapped and counted against the Ensembl annotation, our results only have information about Ensembl gene IDs. However, our pathway analysis downstream will use KEGG pathways, and genes in KEGG pathways are annotated with Entrez gene IDs. So lets add them as we did the last day.
+
+Install packages from BioConductor (in the console). `BiocManager::install()`.
+
+```{r}
+library(AnnotationDbi)
+library(org.Hs.eg.db)
+
+# What is available in the org.Hs.eg.db dataset?
+columns(org.Hs.eg.db)
+```
+
+Lets add extra annotation to our results object
+```{r}
+res$symbol = mapIds(org.Hs.eg.db,
+                    keys=row.names(res), 
+                    keytype="ENSEMBL",
+                    column="SYMBOL",
+                    multiVals="first")
+
+res$entrez <- mapIds(org.Hs.eg.db,
+                    keys=row.names(res), 
+                    keytype="ENSEMBL",
+                    column="ENTREZID",
+                    multiVals="first")
+
+head(res)
+```
+
+##  Pathway Analysis
+
+Now that we have our geneIDs in the correct format we can do pathway analysis
+
+Here we are going to use the 'gage' package for pathway analysis. Once we have a list of enriched pathways, we're going to use the 'pathview' package to draw pathway diagrams, shading the molecules in the pathway by their degree of up/down-regulation.
+
+But first, I need to install the packages. (in the console)
+```{r}
+# BiocManager::install( c("pathview", "gage", "gageData") )
+
+library(pathview)
+library(gage)
+library(gageData)
+```
+
+```{r}
+data(kegg.sets.hs)
+data(sigmet.idx.hs)
+
+# Focus on signaling and metabolic pathways only
+kegg.sets.hs = kegg.sets.hs[sigmet.idx.hs]
+
+# Examine the first 3 pathways
+head(kegg.sets.hs, 3)
+```
+
+Make an input vector of our numeric quantity of interest i.e. fold change values and make sure it has ENTREZ gene names associated with it.
+
+```{r}
+foldchanges = res$log2FoldChange
+names(foldchanges) = res$entrez
+head(foldchanges)
+```
+
+Now run **gage** with this input vector and our KEGG genesets. 
+
+```{r}
+# Get the results
+keggres = gage(foldchanges, gsets=kegg.sets.hs)
+```
+
+
+What is in our results? We can use `attributes()` function to see what is returned here.
+```{r}
+attributes(keggres)
+```
+
+```{r}
+# Look at the first few down (less) pathways
+head(keggres$less)
+
+```
+
+We use the KEGG pathway ID from our top hit along with our `foldchange` vector to view our results as a more useful figure.
+
+```{r}
+pathview(gene.data=foldchanges, pathway.id="hsa04110")
+```
+
+> all the colored genes are the things involved in the pathway.
+
+![hsa04110.pathview.png]()
+> imports this figure into our report
+
+
+```{r}
+knitr::include_graphics("hsa00140.pathview.png")
+```
+
