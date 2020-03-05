@@ -1,0 +1,192 @@
+---
+title: "Class 18: Investigating Cancer Genomics Databases"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Connect to the NCI-GDC database
+
+The NCI_GDC (cancer genomics commons) is a major portal for cancer genomics data.
+
+Here we use the bioconductor package **GenomicDataCommons** to talk to this database and download data etc. all from R. 
+
+```{r}
+library(GenomicDataCommons)
+library(TCGAbiolinks)
+library(maftools)
+```
+
+Can we talk to the online database?
+
+```{r}
+status()
+```
+
+## Querying the GDC from R
+
+`%>%` is pipe. Goes from one thing to another thing. Like reading from left to right. Function to the right, carries it out on the thing to the left. It can be more clear to read sometimes. However, it is specific to R.
+
+```{r}
+c(1:10) %>% mean()
+```
+
+See it used in the code below.
+
+```{r}
+cases_by_project <- cases() %>%
+  facet("project.project_id") %>%
+  aggregations()
+head(cases_by_project)
+```
+
+Row 'doc_count' is how many cases. 'key' column is the project name.
+
+### Plot this overview data
+
+```{r}
+x <- cases_by_project$project.project_id
+head(x)
+barplot(x$doc_count)
+```
+
+
+```{r}
+barplot(x$doc_count, names.arg=x$key, las=2, col="light blue", log="y")
+```
+
+`las=2` rotated the labels of the x-axis.
+
+## Variant analysis with R
+
+Find files available for PAAD project that we can then examine variants from.
+
+```{r}
+maf.file <- GDCquery_Maf(tumor="PAAD", pipelines = "mutect")
+maf.file
+```
+
+Read in the MAF file we found.
+```{r}
+vars = read.maf(maf = maf.file, verbose = FALSE)
+```
+
+
+Now make a summary plot of this data.
+
+```{r}
+plotmafSummary(vars)
+```
+
+
+## Oncoplots
+
+We can make oncoplots for a specific gene too...
+
+```{r}
+lollipopPlot(vars, gene='TP53')
+```
+
+```{r}
+library(bio3d)
+seqs <- read.fasta("lecture18_sequences.fa")
+seqs
+```
+
+```{r}
+ide <- conserv(seqs$ali, method="identity")
+mutant.sites <- which(ide < 1) 
+
+mutant.sites
+```
+
+We can get rid of the gap positions, since that's not really sequence.
+
+```{r}
+gaps <- gap.inspect(seqs)
+gaps$t.inds
+
+# this tells us which columns have gaps
+```
+
+```{r}
+gaps <- gap.inspect(seqs)
+mutant.sites <- mutant.sites[mutant.sites %in% gaps$f.inds]
+
+mutant.sites
+```
+
+let;s understand this
+
+```{r}
+x <- c(1:6)
+y <- c(1:4)
+x %in% y
+```
+
+This shows that 1 through 4 of vector `y` is contained in vector `x`. 
+
+Find the -8 before and +8 after (i.e. the sequence segment containing all possible 9-mer sequences with a tumor specific amino-acid)
+
+```{r}
+mutant.sites - 8
+mutant.sites + 8 
+```
+ 33 and 49 are the start and end.
+ 
+ But how do we get it to run on any database in the future?
+ 
+```{r}
+## Sequence positions surounding each mutant site
+start.position <- mutant.sites - 8
+end.position <-  mutant.sites + 8
+```
+```{r}
+seqs$ali[,start.position[1]:end.position[1] ]
+```
+ 
+ At the 9th position we can see the mutant. How do I extract just the second row?
+ 
+```{r}
+seqs$ali[2,start.position[1]:end.position[1] ]
+```
+ 
+```{r}
+## Make a "names" label for our output sequences (one per mutant)
+mutant.names <- paste0(seqs$ali["P53_wt",mutant.sites],
+                       mutant.sites,
+                       seqs$ali["P53_mutant",mutant.sites])
+
+mutant.names
+
+# Blank matrix to store sub-sequences
+store.seqs <- matrix("-", nrow=length(mutant.sites), ncol=17)
+rownames(store.seqs) <- mutant.names
+
+## Extract each sub-sequence
+for(i in 1:length(mutant.sites)) {
+  store.seqs[i,] <- seqs$ali["P53_mutant",start.position[i]:end.position[i]]
+}
+
+store.seqs
+```
+
+```{r}
+write.fasta(seqs=store.seqs, 
+            ids = mutant.names,
+            file="mutantseqs.fa", gap=FALSE)
+```
+
+
+
+
+
+
+
+
+
+
+
+
